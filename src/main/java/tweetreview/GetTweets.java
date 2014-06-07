@@ -2,10 +2,15 @@ package tweetreview;
 
 import java.net.UnknownHostException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Optional;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.MongoClient;
+
 import twitter4j.GeoLocation;
 import twitter4j.Query;
 import twitter4j.QueryResult;
@@ -16,6 +21,8 @@ import twitter4j.TwitterFactory;
 import twitter4j.auth.AccessToken;
 
 public class GetTweets {    
+    private static final Logger logger = LoggerFactory.getLogger(GetTweets.class);
+    
     public static void main(String[] args) throws TwitterException, InterruptedException, UnknownHostException {
         MongoClient mongoClient = new MongoClient();
         
@@ -32,24 +39,37 @@ public class GetTweets {
         twitter.setOAuthConsumer(consumerKey, consumerSecret);
         twitter.setOAuthAccessToken(new AccessToken(token, tokenSecret));
         
-        Query query = new Query("xmen OR x-men");
-        query.setLang("en");
-        query.setGeoCode(new GeoLocation(37.7833, -122.4167), 10.0, Query.MILES);
-        query.setCount(100);
-        
-        QueryResult result = twitter.search(query);
-        if (result.getTweets().size() != query.getCount()) {
-            throw new RuntimeException(String.format("only got %d/%d tweets", result.getTweets().size(), query.getCount()));
-        }
-        if (result.getRateLimitStatus().getRemaining() == 0) {
-            throw new RuntimeException(String.format("rate limited (%d seconds)", result.getRateLimitStatus().getSecondsUntilReset()));
-        }
-        for (Status status : result.getTweets()) {
-            BasicDBObject object = new BasicDBObject()
-                .append("text", status.getText())
-                .append("screen_name", status.getUser().getScreenName())
-                .append("created_at", status.getCreatedAt());
-            collection.insert(object);
+        // Scan backwards in time for tweets.
+        Optional<Long> previousFirstId = Optional.absent();
+        for (int i = 0; i < 3; i++) {
+            Query query = new Query("xmen OR x-men");
+            query.setLang("en");
+            query.setGeoCode(new GeoLocation(37.7833, -122.4167), 10.0, Query.MILES);
+            query.setCount(100); // Don't worry if we don't get the full count. 
+            if (previousFirstId.isPresent()) {
+                query.setMaxId(previousFirstId.get() - 1);
+            }
+
+            QueryResult result = twitter.search(query);
+            if (result.getRateLimitStatus().getRemaining() == 0) {
+                throw new RuntimeException(String.format("rate limited (%d seconds)", result.getRateLimitStatus().getSecondsUntilReset()));
+            }
+            previousFirstId = Optional.of(result.getTweets().get(0).getId());
+            int originalTweets = 0;
+            for (Status status : result.getTweets()) {
+                // We only want to analyze original tweets.
+                if (status.isRetweet()) {
+                    continue;
+                }
+                
+                BasicDBObject object = new BasicDBObject()
+                    .append("text", status.getText())
+                    .append("screen_name", status.getUser().getScreenName())
+                    .append("created_at", status.getCreatedAt());
+                collection.insert(object);
+                originalTweets++;
+            }
+            logger.info("{}/{} original tweets, scanning backwards from {}", originalTweets, result.getTweets().size(), query.getMaxId());
         }
     }
 }

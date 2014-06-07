@@ -35,7 +35,7 @@ public class AnalyzeTweets {
         StanfordCoreNLP pipeline = new StanfordCoreNLP(properties);
 
         DBCursor cursor = collection.find();
-        cursor.limit(10);
+        cursor.limit(100);
         while (cursor.hasNext()) {
             DBObject object = cursor.next();
             String text = (String)object.get("text");
@@ -62,7 +62,6 @@ public class AnalyzeTweets {
         // - How is the model (englishPCFG.ser.gz) compared to the sentence? Do different sentence fragments have different sentiment values?
         CoreMap longestSentence = annotation.get(CoreAnnotations.SentencesAnnotation.class).get(sentenceIndex);
         String className = longestSentence.get(SentimentCoreAnnotations.ClassName.class); // Class names are given by RNNOptions.
-        System.out.printf("sentence (%s): %s\n", className, longestSentence);
         return className.toLowerCase().contains("positive");
     }
 }
