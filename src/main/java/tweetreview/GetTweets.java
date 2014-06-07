@@ -2,6 +2,7 @@ package tweetreview;
 
 import java.net.UnknownHostException;
 
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,13 +40,17 @@ public class GetTweets {
         twitter.setOAuthConsumer(consumerKey, consumerSecret);
         twitter.setOAuthAccessToken(new AccessToken(token, tokenSecret));
         
+        // TODO Figure out how to isolate tweets with emotional content (exclude factual/informational/ad tweets).
         // Scan backwards in time for tweets.
         Optional<Long> previousFirstId = Optional.absent();
         for (int i = 0; i < 3; i++) {
-            Query query = new Query("xmen OR x-men");
+            // I want to search for "X is" to find opinions.
+            // However, I can't do this here because I need to include all variants of the verb "to be".
+            Query query = new Query("xmen");
             query.setLang("en");
-            query.setGeoCode(new GeoLocation(37.7833, -122.4167), 10.0, Query.MILES);
-            query.setCount(100); // Don't worry if we don't get the full count. 
+            query.setGeoCode(new GeoLocation(37.7833, -122.4167), 25.0, Query.MILES);
+            query.setCount(100); // Don't worry if we don't get the full count.
+            query.setSince(new DateTime(2014, 6, 7, 0, 0, 0).minusDays(30).toString("yyyy-MM-dd"));
             if (previousFirstId.isPresent()) {
                 query.setMaxId(previousFirstId.get() - 1);
             }
@@ -56,9 +61,31 @@ public class GetTweets {
             }
             previousFirstId = Optional.of(result.getTweets().get(0).getId());
             int originalTweets = 0;
+            int retweets = 0;
+            int followers = 0;
+            int urls = 0;
             for (Status status : result.getTweets()) {
+                boolean skip = false;
+                
                 // We only want to analyze original tweets.
                 if (status.isRetweet()) {
+                    retweets++;
+                    skip = true;
+                }
+                
+                // We only want the opinions of regular people;
+                if (status.getUser().getFollowersCount() > 1000) {
+                    followers++;
+                    skip = true;
+                }
+                
+                // Tweets with links are probably ads or blogspam.
+                if (status.getURLEntities().length != 0) {
+                    urls++;
+                    skip = true;
+                }
+                
+                if (skip) {
                     continue;
                 }
                 
@@ -69,7 +96,7 @@ public class GetTweets {
                 collection.insert(object);
                 originalTweets++;
             }
-            logger.info("{}/{} original tweets, scanning backwards from {}", originalTweets, result.getTweets().size(), query.getMaxId());
+            logger.info("{}/{} original tweets ({} retweets, {} tweets from popular users, {} tweets with urls), scanning backwards from {}", originalTweets, result.getTweets().size(), retweets, followers, urls, query.getMaxId());
         }
     }
 }

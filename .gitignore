@@ -6,6 +6,7 @@
 
 # output
 *.log
+*.txt
 
 # build
 target
