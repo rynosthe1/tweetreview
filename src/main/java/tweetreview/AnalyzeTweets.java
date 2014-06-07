@@ -41,12 +41,12 @@ public class AnalyzeTweets {
             String text = (String)object.get("text");
             String screenName = (String)object.get("screen_name");
             DateTime createdAt = new DateTime((Date)object.get("created_at"));
-            boolean sentiment = analyzeTweet(pipeline, text);
-            System.out.printf("%s: %s %s: %s\n", sentiment ? "good" : "bad", createdAt.toString("yyyy-MM-dd HH:mm:ss"), screenName, text);
+            String className = analyzeTweet(pipeline, text);
+            System.out.printf("%s: %s %s: %s\n", className, createdAt.toString("yyyy-MM-dd HH:mm:ss"), screenName, text);
         }
     }
 
-    private static boolean analyzeTweet(StanfordCoreNLP pipeline, String text) {
+    private static String analyzeTweet(StanfordCoreNLP pipeline, String text) {
         Annotation annotation = new Annotation(text);
         pipeline.annotate(annotation);
 
@@ -62,6 +62,6 @@ public class AnalyzeTweets {
         // - How is the model (englishPCFG.ser.gz) compared to the sentence? Do different sentence fragments have different sentiment values?
         CoreMap longestSentence = annotation.get(CoreAnnotations.SentencesAnnotation.class).get(sentenceIndex);
         String className = longestSentence.get(SentimentCoreAnnotations.ClassName.class); // Class names are given by RNNOptions.
-        return className.toLowerCase().contains("positive");
+        return className;
     }
 }
